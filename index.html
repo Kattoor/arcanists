@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dag Randy</title>
+    <script src="draw.js"></script>
+    <script src="terrain.js"></script>
+    <script src="physics.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<script>
+    const canvasDimensions = DrawEngine.createCanvas(document);
+    const terrain = TerrainGenerator.generate(canvasDimensions);
+
+    setInterval(() => {
+        DrawEngine.draw(terrain);
+    }, 1000 / 60);
+</script>
+</body>
+</html>
