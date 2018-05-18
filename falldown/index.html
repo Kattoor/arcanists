@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dag Randy</title>
+    <script src="terrain.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<script>
+    const canvas = document.getElementById('canvas');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    const canvasDimensions = {width: canvas.width, height: canvas.height};
+
+    const terrain = TerrainGenerator.generate(canvasDimensions);
+
+    let radius = 10;
+
+    function moveDown(toSinkIndices, gapIndices, currentlyAt) {
+        toSinkIndices.forEach(index => terrain.blocks[index] = '#78CEEB');
+        gapIndices.forEach(index => terrain.blocks[index] = '#78CEEB');
+        toSinkIndices.forEach(index => {
+            index += (currentlyAt * terrain.amountOfBlocksHorizontally);
+            terrain.blocks[index] = '#4E2E28';
+        });
+    }
+
+    function update() {
+
+        const redrawList = [];
+
+        const queueLength = queue.length;
+        for (let i = 0; i < queueLength; i++) {
+            const action = queue.shift();
+            switch (action.type) {
+                case 'removeBlock':
+                    const index = action.data;
+                    const removed = removeBlock(index);
+                    queue.push({
+                        type: 'sinkBlocksAbove',
+                        data: removed.upperRemovedRowIndices
+                    });
+                    redrawList.push(...removed.removedIndices);
+                    break;
+                case 'sinkBlocksAbove':
+                    const indices = action.data;
+                    indices.forEach(index => {
+                        if (terrain.blocks[index] === '#78CEEB') {
+                            let topMostSkyBlockIndex = index;
+                            if (terrain.blocks[index - terrain.amountOfBlocksHorizontally] === '#78CEEB') {
+                                //find topmost sky block without passing earth
+                                topMostSkyBlockIndex = index - terrain.amountOfBlocksHorizontally * 2;
+                                while (terrain.blocks[topMostSkyBlockIndex] !== '#4E2E28' && topMostSkyBlockIndex >= 0)
+                                    topMostSkyBlockIndex -= terrain.amountOfBlocksHorizontally;
+                                if (topMostSkyBlockIndex < 0)
+                                    return; //only sky on top, never earth
+                                topMostSkyBlockIndex += terrain.amountOfBlocksHorizontally;
+                            }
+
+                            let newIndex = topMostSkyBlockIndex;
+                            let amountToSink = 1;
+                            while ((newIndex = newIndex + terrain.amountOfBlocksHorizontally) <= (terrain.amountOfBlocksVertically * terrain.amountOfBlocksHorizontally) && terrain.blocks[newIndex] === '#78CEEB')
+                                amountToSink++;
+
+                            newIndex = topMostSkyBlockIndex;
+                            const toSinkIndices = [];
+                            while ((newIndex = newIndex - terrain.amountOfBlocksHorizontally) >= 0 && terrain.blocks[newIndex] === '#4E2E28')
+                                toSinkIndices.push(newIndex);
+
+                            newIndex = topMostSkyBlockIndex;
+                            const gapIndices = [topMostSkyBlockIndex];
+                            while (terrain.blocks[(newIndex = newIndex + terrain.amountOfBlocksHorizontally)] === '#78CEEB')
+                                gapIndices.push(newIndex);
+
+                            queue.push({
+                                type: 'sinkBlocksByAmount',
+                                data: {toSinkIndices, amountToSink, gapIndices, currentlyAt: 1}
+                            })
+                        }
+                    });
+                    break;
+                case 'sinkBlocksByAmount':
+                    if (action.data.currentlyAt <= action.data.amountToSink) {
+                        moveDown(action.data.toSinkIndices, action.data.gapIndices, action.data.currentlyAt);
+                        redrawList.push(...action.data.toSinkIndices.concat(action.data.gapIndices));
+
+                        queue.push({
+                            type: 'sinkBlocksByAmount',
+                            data: {
+                                toSinkIndices: action.data.toSinkIndices,
+                                amountToSink: action.data.amountToSink,
+                                gapIndices: action.data.gapIndices,
+                                currentlyAt: action.data.currentlyAt + 1
+                            }
+                        });
+                    }
+                    break;
+            }
+        }
+
+        return redrawList;
+
+        /* for (let y = 0; y < terrain.amountOfBlocksVertically; y++) {
+             for (let x = 0; x < terrain.amountOfBlocksHorizontally; x++) {
+                 const index = y * terrain.amountOfBlocksHorizontally + x;
+                 const block = terrain.blocks[index];
+                 if (block === '#4E2E28') {
+                     if (isSkyBeneath(index)) {
+                         sinkBlock(index);
+                     }
+                 }
+                 ctx.fillStyle = terrain.blocks[index];
+                 ctx.fillRect(x * terrain.blockSize, y * terrain.blockSize, terrain.blockSize, terrain.blockSize);
+             }
+         }*/
+    }
+
+    function getRandomColor() {
+        const letters = '0123456789ABCDEF';
+        let color = '#';
+        for (let i = 0; i < 6; i++)
+            color += letters[Math.floor(Math.random() * letters.length)];
+        return color;
+    }
+
+    function removeBlock(index) {
+        const blockX = index % terrain.amountOfBlocksHorizontally;
+        const blockY = Math.floor(index / terrain.amountOfBlocksHorizontally);
+        const removedIndices = [];
+        const upperRemovedRowIndices = [];
+        for (let y = -radius; y <= radius; y++) {
+            for (let x = -radius; x <= radius; x++) {
+                const index = (blockY + y) * terrain.amountOfBlocksHorizontally + (blockX + x);
+                if (y === -radius)
+                    upperRemovedRowIndices.push(index);
+                removedIndices.push(index);
+                terrain.blocks[index] = '#78CEEB';
+            }
+        }
+        return {upperRemovedRowIndices, removedIndices};
+        /*terrain.blocks[index - terrain.amountOfBlocksHorizontally - 1] = '#78CEEB';
+        terrain.blocks[index - terrain.amountOfBlocksHorizontally] = '#78CEEB';
+        terrain.blocks[index - terrain.amountOfBlocksHorizontally + 1] = '#78CEEB';
+        terrain.blocks[index - 1] = '#78CEEB';
+        terrain.blocks[index] = '#78CEEB';
+        terrain.blocks[index + 1] = '#78CEEB';
+        terrain.blocks[index + terrain.amountOfBlocksHorizontally - 1] = '#78CEEB';
+        terrain.blocks[index + terrain.amountOfBlocksHorizontally] = '#78CEEB';
+        terrain.blocks[index + terrain.amountOfBlocksHorizontally + 1] = '#78CEEB';*/
+        /*if (terrain.blocks[index - terrain.amountOfBlocksHorizontally] === '#4E2E28') {
+            terrain.blocks[index] = '#4E2E28';
+        }*/
+    }
+
+    function draw() {
+        for (let y = 0; y < terrain.amountOfBlocksVertically; y++) {
+            for (let x = 0; x < terrain.amountOfBlocksHorizontally; x++) {
+                const index = y * terrain.amountOfBlocksHorizontally + x;
+                ctx.fillStyle = terrain.blocks[index];
+                ctx.fillRect(x * terrain.blockSize, y * terrain.blockSize, terrain.blockSize, terrain.blockSize);
+            }
+        }
+    }
+
+    function redraw(updatedPixels) {
+        updatedPixels.forEach(index => {
+            ctx.fillStyle = terrain.blocks[index];
+            ctx.fillRect(index % terrain.amountOfBlocksHorizontally * terrain.blockSize, Math.floor(index / terrain.amountOfBlocksHorizontally) * terrain.blockSize, terrain.blockSize, terrain.blockSize);
+        });
+    }
+
+    draw();
+
+    const queue = [];
+
+    window.onclick = e => {
+        const index = (Math.floor(e.clientY / terrain.blockSize) * terrain.amountOfBlocksHorizontally + Math.floor(parseInt(e.clientX) / terrain.blockSize));
+        queue.push({type: 'removeBlock', data: index});
+    };
+
+    window.onmousewheel = e => {
+        radius = radius - (e.deltaY / 53);
+        if (radius < 1)
+            radius = 1;
+    };
+
+
+    setInterval(() => {
+        const updatedPixels = update();
+        redraw(updatedPixels);
+    }, 1000 / 60);
+
+</script>
+</body>
+</html>
